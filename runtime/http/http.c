@@ -4,12 +4,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+
+#if defined(_WIN32) || defined(__MINGW32__)
+  #include <winsock2.h>
+  #include <ws2tcpip.h>
+  #include <io.h>
+  #define close_socket closesocket
+#else
+  #include <unistd.h>
+  #include <fcntl.h>
+  #include <errno.h>
+  #include <sys/socket.h>
+  #include <netinet/in.h>
+  #include <arpa/inet.h>
+  #define close_socket close
+#endif
 
 typedef struct Route {
     char *method;
@@ -23,8 +32,13 @@ static int g_server_port = 0;
 static Route *g_routes = NULL;
 
 static void set_nonblocking(int fd) {
+#if defined(_WIN32) || defined(__MINGW32__)
+    u_long mode = 1;
+    ioctlsocket(fd, FIONBIO, &mode);
+#else
     int flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+#endif
 }
 
 void jag_server_on(int port, JagValue *options) {
@@ -69,9 +83,9 @@ static bool match_route(const char *pattern, const char *path, JagValue *params)
 
 static void handle_client_connection(int client_fd) {
     char buf[4096];
-    ssize_t n = read(client_fd, buf, sizeof(buf) - 1);
+    ssize_t n = recv(client_fd, buf, sizeof(buf) - 1, 0);
     if (n <= 0) {
-        close(client_fd);
+        close_socket(client_fd);
         return;
     }
     buf[n] = '\0';
@@ -124,9 +138,8 @@ static void handle_client_connection(int client_fd) {
         "%s",
         res.status_code, res.body ? strlen(res.body) : 0, res.body ? res.body : "");
 
-    ssize_t w = write(client_fd, resp_buf, resp_len);
-    (void)w;
-    close(client_fd);
+    send(client_fd, resp_buf, resp_len, 0);
+    close_socket(client_fd);
 
     free(req.method);
     free(req.path);
@@ -140,9 +153,14 @@ static void handle_client_connection(int client_fd) {
 void jag_server_listen(void) {
     if (g_server_port <= 0) return;
 
+#if defined(_WIN32) || defined(__MINGW32__)
+    WSADATA wsa;
+    WSAStartup(MAKEWORD(2,2), &wsa);
+#endif
+
     g_server_fd = socket(AF_INET, SOCK_STREAM, 0);
     int opt = 1;
-    setsockopt(g_server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    setsockopt(g_server_fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt));
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
@@ -161,13 +179,17 @@ void jag_server_listen(void) {
         if (client_fd >= 0) {
             handle_client_connection(client_fd);
         }
+#if defined(_WIN32) || defined(__MINGW32__)
+        Sleep(1);
+#else
         usleep(1000);
+#endif
     }
 }
 
 void jag_server_close(void) {
     if (g_server_fd >= 0) {
-        close(g_server_fd);
+        close_socket(g_server_fd);
         g_server_fd = -1;
     }
 }
