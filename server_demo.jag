@@ -1,0 +1,35 @@
+import "http.jag";
+
+fixed PORT: num = env.get("PORT", 8080);
+
+server.on(PORT);
+
+server.route("GET", "/", fun(req: data, res: data) {
+    res.send("Welcome to Jaguar HTTP server");
+});
+
+server.route("GET", "/users/{id}", async fun(req: data, res: data) {
+    try {
+        var upstream: data = await http.get("https://api.example.com/users");
+        res.json(json.parse(upstream["body"]));
+    } catch (err: string) {
+        res.status(502).json({ "error": err });
+    }
+});
+
+socket.on(9090);
+
+socket.route("/chat", fun(ws: Socket) {
+    ws.on("message", fun(msg: string) {
+        ws.send("echo");
+    });
+});
+
+var pool: Worker = worker.pool(4);
+
+server.route("POST", "/compute", fun(req: data, res: data) {
+    pool.submit(fun(): num { return 42; });
+});
+
+server.listen();
+socket.listen();

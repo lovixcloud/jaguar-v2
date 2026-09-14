@@ -1,0 +1,6 @@
+var greeting: string = "Welcome to Jaguar Programming Language!";
+live.on(greeting);
+
+var portVal: num = env.get("PORT", 8080);
+live.on("Server configured on port:");
+live.on(portVal);
