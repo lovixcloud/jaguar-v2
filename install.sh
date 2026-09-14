@@ -7,13 +7,23 @@ echo "Building Jaguar Compiler Toolchain..."
 make clean
 make
 
-echo "Installing jag binary and runtime library to ${PREFIX}..."
-install -d "${PREFIX}/bin"
-install -d "${PREFIX}/lib"
-install -d "${PREFIX}/include/jaguar"
+EXE_NAME="jag"
+if [ -f "jag.exe" ]; then
+    EXE_NAME="jag.exe"
+fi
 
-install -m 0755 jag "${PREFIX}/bin/jag"
-install -m 0644 libjagrt.a "${PREFIX}/lib/libjagrt.a"
-cp -r runtime/* "${PREFIX}/include/jaguar/"
+echo "Installing ${EXE_NAME} binary and runtime library to ${PREFIX}..."
+mkdir -p "${PREFIX}/bin"
+mkdir -p "${PREFIX}/lib"
+mkdir -p "${PREFIX}/include/jaguar"
 
-echo "Jaguar successfully installed! Run 'jag --version' to verify."
+cp "${EXE_NAME}" "${PREFIX}/bin/${EXE_NAME}"
+chmod 0755 "${PREFIX}/bin/${EXE_NAME}" 2>/dev/null || true
+
+if [ -f "libjagrt.a" ]; then
+    cp libjagrt.a "${PREFIX}/lib/libjagrt.a"
+fi
+
+cp -r runtime/* "${PREFIX}/include/jaguar/" 2>/dev/null || true
+
+echo "Jaguar successfully installed! Run '${EXE_NAME} --version' to verify."
