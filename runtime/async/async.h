@@ -4,7 +4,14 @@
 #include "runtime/core/value.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include <ucontext.h>
+#include <setjmp.h>
+
+#if defined(__has_include)
+  #if __has_include(<ucontext.h>) && !defined(_WIN32)
+    #include <ucontext.h>
+    #define HAVE_UCONTEXT 1
+  #endif
+#endif
 
 typedef struct JagTask JagTask;
 typedef void (*TaskFn)(void *arg);
@@ -12,7 +19,11 @@ typedef void (*TaskFn)(void *arg);
 typedef struct {
     int epoll_fd;
     bool running;
+#ifdef HAVE_UCONTEXT
     ucontext_t main_context;
+#else
+    jmp_buf main_jmp;
+#endif
     JagTask *current_task;
 } EventLoop;
 
@@ -21,7 +32,11 @@ struct JagTask {
     bool completed;
     JagValue *result;
     char *error;
+#ifdef HAVE_UCONTEXT
     ucontext_t context;
+#else
+    jmp_buf jmp;
+#endif
     char *stack;
     size_t stack_size;
     TaskFn fn;
