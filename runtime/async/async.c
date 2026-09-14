@@ -2,9 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if !defined(_WIN32)
 #include <sys/epoll.h>
 #include <sys/time.h>
 #include <unistd.h>
+#endif
 
 static EventLoop g_loop;
 static uint64_t g_task_id_seq = 1;
@@ -24,14 +26,20 @@ static JagTimer *g_timers = NULL;
 static JagTask *g_task_queue = NULL;
 
 static uint64_t current_time_ms(void) {
+#if !defined(_WIN32)
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (uint64_t)tv.tv_sec * 1000 + (uint64_t)tv.tv_usec / 1000;
+#else
+    return 0;
+#endif
 }
 
 void event_loop_init(void) {
     memset(&g_loop, 0, sizeof(EventLoop));
+#if !defined(_WIN32)
     g_loop.epoll_fd = epoll_create1(0);
+#endif
     g_loop.running = false;
 }
 
@@ -39,6 +47,7 @@ EventLoop *get_event_loop(void) {
     return &g_loop;
 }
 
+#ifdef HAVE_UCONTEXT
 static void task_entry(uint32_t hi, uint32_t lo) {
     uint64_t ptr_val = ((uint64_t)hi << 32) | lo;
     JagTask *task = (JagTask *)ptr_val;
@@ -48,6 +57,7 @@ static void task_entry(uint32_t hi, uint32_t lo) {
     task->completed = true;
     swapcontext(&task->context, &g_loop.main_context);
 }
+#endif
 
 JagTask *task_create(TaskFn fn, void *arg) {
     JagTask *t = (JagTask *)calloc(1, sizeof(JagTask));
@@ -57,6 +67,7 @@ JagTask *task_create(TaskFn fn, void *arg) {
     t->stack_size = 128 * 1024;
     t->stack = (char *)malloc(t->stack_size);
 
+#ifdef HAVE_UCONTEXT
     getcontext(&t->context);
     t->context.uc_stack.ss_sp = t->stack;
     t->context.uc_stack.ss_size = t->stack_size;
@@ -66,6 +77,7 @@ JagTask *task_create(TaskFn fn, void *arg) {
     uint32_t hi = (uint32_t)(ptr_val >> 32);
     uint32_t lo = (uint32_t)(ptr_val & 0xFFFFFFFF);
     makecontext(&t->context, (void (*)(void))task_entry, 2, hi, lo);
+#endif
 
     t->next = g_task_queue;
     g_task_queue = t;
@@ -76,13 +88,22 @@ void task_resume(JagTask *task) {
     if (!task || task->completed) return;
     JagTask *prev = g_loop.current_task;
     g_loop.current_task = task;
+#ifdef HAVE_UCONTEXT
     swapcontext(&g_loop.main_context, &task->context);
+#else
+    if (task->fn) {
+        task->fn(task->arg);
+        task->completed = true;
+    }
+#endif
     g_loop.current_task = prev;
 }
 
 void task_yield(void) {
     if (g_loop.current_task) {
+#ifdef HAVE_UCONTEXT
         swapcontext(&g_loop.current_task->context, &g_loop.main_context);
+#endif
     }
 }
 
@@ -135,7 +156,6 @@ void live_clear(uint64_t timer_id) {
 void event_loop_run(void) {
     g_loop.running = true;
 
-    struct epoll_event events[64];
     while (g_loop.running) {
         uint64_t now = current_time_ms();
 
@@ -164,8 +184,11 @@ void event_loop_run(void) {
             q = q->next;
         }
 
+#if !defined(_WIN32)
+        struct epoll_event events[64];
         int nfds = epoll_wait(g_loop.epoll_fd, events, 64, 10);
         (void)nfds;
+#endif
 
         bool has_work = false;
         if (g_timers) has_work = true;
