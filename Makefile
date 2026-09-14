@@ -1,11 +1,12 @@
 CC ?= gcc
 CFLAGS ?= -Wall -Wextra -std=c11 -D_GNU_SOURCE -g -O2 -I. -Iruntime
-LDFLAGS ?= -lpthread -lssl -lcrypto -lm
+LDFLAGS ?= -lpthread -lm
 
 ifeq ($(OS),Windows_NT)
     LDFLAGS += -lws2_32
     EXE_EXT = .exe
 else
+    LDFLAGS += -lssl -lcrypto
     EXE_EXT =
 endif
 
@@ -30,12 +31,13 @@ $(LIBJAGRT): $(RUNTIME_OBJS)
 	fi
 
 $(TARGET): $(COMPILER_OBJS) $(CLI_OBJS) $(LIBJAGRT)
+	@rm -f $(TARGET) 2>/dev/null || true
 	$(CC) $(CFLAGS) -o $@ $(COMPILER_OBJS) $(CLI_OBJS) $(LIBJAGRT) $(LDFLAGS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(RUNTIME_OBJS) $(COMPILER_OBJS) $(CLI_OBJS) $(LIBJAGRT) jag jag.exe tests/test_*
+	@rm -f $(RUNTIME_OBJS) $(COMPILER_OBJS) $(CLI_OBJS) $(LIBJAGRT) jag jag.exe tests/test_* 2>/dev/null || true
 
 .PHONY: all clean

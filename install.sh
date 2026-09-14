@@ -17,6 +17,8 @@ mkdir -p "${PREFIX}/bin"
 mkdir -p "${PREFIX}/lib"
 mkdir -p "${PREFIX}/include/jaguar"
 
+# On Windows/MinGW, remove destination file first if locked/exists
+rm -f "${PREFIX}/bin/${EXE_NAME}" 2>/dev/null || true
 cp "${EXE_NAME}" "${PREFIX}/bin/${EXE_NAME}"
 chmod 0755 "${PREFIX}/bin/${EXE_NAME}" 2>/dev/null || true
 
